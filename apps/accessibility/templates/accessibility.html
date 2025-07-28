@@ -1,0 +1,248 @@
+<!-- Tabs Container -->
+<div class="tabs-container">
+    <div class="tabs">
+        <div class="tab active" data-tab="configure">
+            <i class="fas fa-cog"></i>
+            <span>Configure</span>
+        </div>
+        <div class="tab" data-tab="generate">
+            <i class="fas fa-magic"></i>
+            <span>Generate</span>
+        </div>
+        <div class="tab" data-tab="results">
+            <i class="fas fa-chart-bar"></i>
+            <span>Results</span>
+        </div>
+    </div>
+</div>
+
+<!-- Content -->
+<div class="content">
+    <!-- Configure Tab -->
+    <div id="tab-configure" class="tab-content active">
+        <div class="grid grid-2">
+            <!-- Left Column - Configuration -->
+            <div class="column-left">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-universal-access"></i> WCAG Accessibility Analyzer</h3>
+                    </div>
+                    <div class="card-body">
+                        <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">
+                            This tool analyzes the accessibility of a website or app based on Web Content Accessibility Guidelines (WCAG).
+                            It identifies areas for improvement to enhance user interaction and ensure compliance with accessibility standards.
+                        </p>
+                        
+                        <form id="config-form">
+                            <div class="form-group">
+                                <label class="form-label">Select use case:</label>
+                                <div class="radio-group">
+                                    {% for use_case in use_cases %}
+                                    <div class="radio-item">
+                                        <input type="radio" id="{{ use_case.replace(' ', '_').replace('(', '').replace(')', '').lower() }}" name="use_case" value="{{ use_case }}" {% if loop.first %}checked{% endif %}>
+                                        <label for="{{ use_case.replace(' ', '_').replace('(', '').replace(')', '').lower() }}">{{ use_case }}</label>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">AI Model:</label>
+                                <div class="radio-group">
+                                    {% for model in models %}
+                                    <div class="radio-item">
+                                        <input type="radio" id="{{ model.replace('-', '_').replace('.', '_') }}" name="model_name" value="{{ model }}" {% if loop.first %}checked{% endif %}>
+                                        <label for="{{ model.replace('-', '_').replace('.', '_') }}">{{ model.replace('gemini-', '').replace('-', ' ').title() }}</label>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Language for analysis:</label>
+                                <div class="radio-group">
+                                    {% for lang in languages %}
+                                    <div class="radio-item">
+                                        <input type="radio" id="{{ lang.lower() }}" name="story_lang" value="{{ lang }}" {% if loop.first %}checked{% endif %}>
+                                        <label for="{{ lang.lower() }}">{{ lang }}</label>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column - Video Display -->
+            <div class="column-right">
+                <div class="card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-video"></i> Demo Video</h3>
+                    </div>
+                    <div class="card-body video-container">
+                        <div id="video-display">
+                            <video id="demo-video" width="100%" controls style="max-width: 400px; margin: 0 auto; display: block;">
+                                <source id="video-source" src="https://storage.googleapis.com/convento-samples/nike-sbf.mp4" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                            <div style="text-align: center; margin-top: 0.5rem;">
+                                <small id="video-description" style="color: var(--text-secondary);">Nike online store user interaction demo</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generate Tab -->
+    <div id="tab-generate" class="tab-content">
+        <div class="grid grid-1">
+            <div class="card">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3><i class="fas fa-magic"></i> Accessibility Analysis Workflow</h3>
+                    <i id="clear_all_btn" class="fas fa-trash clear-icon" title="Clear All and Restart"></i>
+                </div>
+                <div class="card-body button-group" id="generation_buttons">
+                    <div class="action-button-wrapper">
+                        <button id="generate_wcag_analysis_btn" class="action-button button-ready">
+                            <span><i class="fas fa-clipboard-check"></i> 1. Generate WCAG Analysis</span>
+                            <div class="loader" id="loader_wcag_analysis"></div>
+                        </button>
+                        <i class="fas fa-redo regenerate-icon" id="regen_wcag_analysis_btn" style="display: none;"></i>
+                    </div>
+
+                    <div class="action-button-wrapper">
+                        <button id="generate_user_stories_btn" class="action-button button-waiting" disabled>
+                            <span><i class="fas fa-users"></i> 2. Generate Accessibility User Stories</span>
+                            <div class="loader" id="loader_user_stories"></div>
+                        </button>
+                        <i class="fas fa-redo regenerate-icon" id="regen_user_stories_btn" style="display: none;"></i>
+                    </div>
+
+                    <div class="action-button-wrapper">
+                        <button id="generate_implementation_btn" class="action-button button-waiting" disabled>
+                            <span><i class="fas fa-code"></i> 3. Generate Implementation Plan</span>
+                            <div class="loader" id="loader_implementation"></div>
+                        </button>
+                        <i class="fas fa-redo regenerate-icon" id="regen_implementation_btn" style="display: none;"></i>
+                    </div>
+
+                    <div class="action-button-wrapper">
+                        <button id="generate_test_plan_btn" class="action-button button-waiting" disabled>
+                            <span><i class="fas fa-vial"></i> 4. Generate Test Plan</span>
+                            <div class="loader" id="loader_test_plan"></div>
+                        </button>
+                        <i class="fas fa-redo regenerate-icon" id="regen_test_plan_btn" style="display: none;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Tab -->
+    <div id="tab-results" class="tab-content">
+        <div class="grid grid-1">
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="fas fa-chart-bar"></i> Analysis Results</h3>
+                </div>
+                <div class="card-body">
+                    <div id="results-container">
+                        <p style="text-align: center; color: var(--text-secondary); font-style: italic;">
+                            Generated accessibility analysis will appear here...
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Video Container Styles */
+.video-container {
+    text-align: center;
+    padding: 1.5rem;
+}
+
+#demo-video {
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-md);
+    transition: transform 0.2s ease;
+}
+
+#demo-video:hover {
+    transform: scale(1.02);
+}
+
+/* Accessibility-specific button colors */
+.accessibility-analysis .action-button {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+}
+
+.accessibility-analysis .action-button:hover {
+    background: linear-gradient(135deg, #5855eb 0%, #7c3aed 100%);
+}
+
+/* WCAG compliance colors */
+.wcag-level-a {
+    color: #059669;
+    font-weight: 600;
+}
+
+.wcag-level-aa {
+    color: #d97706;
+    font-weight: 600;
+}
+
+.wcag-level-aaa {
+    color: #dc2626;
+    font-weight: 600;
+}
+
+/* Accessibility icon styles */
+.accessibility-icon {
+    color: var(--primary-color);
+    margin-right: 0.5rem;
+}
+
+/* Video description styles */
+#video-description {
+    font-style: italic;
+    margin-top: 0.5rem;
+    display: block;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Video switching based on use case selection
+    const useCaseRadios = document.querySelectorAll('input[name="use_case"]');
+    const videoElement = document.getElementById('demo-video');
+    const videoSource = document.getElementById('video-source');
+    const videoDescription = document.getElementById('video-description');
+
+    function updateVideo() {
+        const selectedUseCase = document.querySelector('input[name="use_case"]:checked')?.value;
+        
+        if (selectedUseCase === 'Retail (Nike)') {
+            videoSource.src = 'https://storage.googleapis.com/convento-samples/nike-sbf.mp4';
+            videoDescription.textContent = 'Nike online store user interaction demo';
+        } else {
+            videoSource.src = 'https://storage.googleapis.com/convento-samples/raia.mp4';
+            videoDescription.textContent = 'Online pharmacy app user interaction demo';
+        }
+        
+        videoElement.load(); // Reload video with new source
+    }
+
+    useCaseRadios.forEach(radio => {
+        radio.addEventListener('change', updateVideo);
+    });
+
+    // Initialize with first option
+    updateVideo();
+});
+</script>

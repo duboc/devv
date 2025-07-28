@@ -1,0 +1,196 @@
+<!-- Tabs Container -->
+<div class="tabs-container">
+    <div class="tabs">
+        <div class="tab active" data-tab="configure">
+            <i class="fas fa-cog"></i>
+            <span>Configure</span>
+        </div>
+        <div class="tab" data-tab="generate">
+            <i class="fas fa-magic"></i>
+            <span>Generate</span>
+        </div>
+        <div class="tab" data-tab="results">
+            <i class="fas fa-chart-bar"></i>
+            <span>Results</span>
+        </div>
+    </div>
+</div>
+
+<!-- Content -->
+<div class="content">
+    <!-- Configure Tab -->
+    <div id="tab-configure" class="tab-content active">
+        <div class="grid grid-2">
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="fas fa-cog"></i> Configuration</h3>
+                </div>
+                <div class="card-body">
+                    <form id="config-form">
+                        <div class="form-group">
+                            <label class="form-label">Model:</label>
+                            <div class="radio-group">
+                                {% for model in models %}
+                                <div class="radio-item">
+                                    <input type="radio" id="{{ model }}" name="model_name" value="{{ model }}" {% if loop.first %}checked{% endif %}>
+                                    <label for="{{ model }}">{{ model }}</label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Industry:</label>
+                            <div class="radio-group">
+                                {% for industry in industries %}
+                                <div class="radio-item">
+                                    <input type="radio" id="{{ industry }}" name="category" value="{{ industry }}" {% if loop.first %}checked{% endif %}>
+                                    <label for="{{ industry }}">{{ industry.title() }}</label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Language:</label>
+                            <div class="radio-group">
+                                {% for lang in languages %}
+                                <div class="radio-item">
+                                    <input type="radio" id="{{ lang }}" name="story_lang" value="{{ lang }}" {% if loop.first %}checked{% endif %}>
+                                    <label for="{{ lang }}">{{ lang }}</label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="persona_name" class="form-label">Persona:</label>
+                            <input type="text" id="persona_name" name="persona_name" value="Breno Cabral" class="input-field">
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="fas fa-lightbulb"></i> User Theme</h3>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label for="user_story_select" class="form-label">Select a theme:</label>
+                        <select id="user_story_select" name="user_story_select" class="select-field">
+                            {% for question in questions %}
+                            <option value="{{ question }}">{{ question }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="user_story" class="form-label">Edit your theme:</label>
+                        <textarea id="user_story" name="user_story" class="textarea-field"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generate Tab -->
+    <div id="tab-generate" class="tab-content">
+        <div class="grid grid-1">
+            <div class="card">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3><i class="fas fa-magic"></i> Generation Workflow</h3>
+                    <i id="clear_all_btn" class="fas fa-trash clear-icon" title="Clear All and Restart"></i>
+                </div>
+                <div class="card-body button-group">
+                    <div class="action-button-wrapper">
+                        <button id="generate_story_btn" class="action-button button-ready">
+                            <span><i class="fas fa-book"></i> 1. Generate my story</span>
+                            <div class="loader" id="loader_story"></div>
+                        </button>
+                        <i class="fas fa-redo regenerate-icon" id="regen_story_btn" style="display: none;"></i>
+                    </div>
+                    
+                    <div class="action-button-wrapper">
+                        <button id="generate_tasks_btn" class="action-button button-waiting" disabled>
+                            <span><i class="fas fa-tasks"></i> 2. Generate tasks</span>
+                            <div class="loader" id="loader_tasks"></div>
+                        </button>
+                        <i class="fas fa-redo regenerate-icon" id="regen_tasks_btn" style="display: none;"></i>
+                    </div>
+                    
+                    <div class="action-button-wrapper">
+                        <button id="generate_dw_btn" class="action-button button-waiting" disabled>
+                            <span><i class="fas fa-database"></i> 3. Create DW from tasks</span>
+                            <div class="loader" id="loader_dw"></div>
+                        </button>
+                        <i class="fas fa-redo regenerate-icon" id="regen_dw_btn" style="display: none;"></i>
+                    </div>
+                    
+                    <div class="action-button-wrapper">
+                        <button id="generate_bigquery_btn" class="action-button button-waiting" disabled>
+                            <span><i class="fas fa-cloud"></i> 4. Create BigQuery Implementation</span>
+                            <div class="loader" id="loader_bigquery"></div>
+                        </button>
+                        <i class="fas fa-redo regenerate-icon" id="regen_bigquery_btn" style="display: none;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Tab -->
+    <div id="tab-results" class="tab-content">
+        <div class="grid grid-1">
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="fas fa-chart-bar"></i> Generated Results</h3>
+                </div>
+                <div class="card-body">
+                    <div id="results-container">
+                        <p style="text-align: center; color: var(--text-secondary); font-style: italic;">
+                            Generated content will appear here...
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+.action-button-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.action-button {
+    flex-grow: 1;
+}
+.regenerate-icon {
+    position: absolute;
+    right: 1.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: white;
+    cursor: pointer;
+    font-size: 1.25rem;
+    transition: transform 0.2s;
+}
+.regenerate-icon:hover {
+    transform: translateY(-50%) rotate(45deg);
+}
+.button-danger {
+    background-color: var(--danger-color);
+    color: white;
+}
+.clear-icon {
+    color: var(--text-light);
+    cursor: pointer;
+    font-size: 1.1rem;
+    transition: color 0.2s, transform 0.2s;
+}
+.clear-icon:hover {
+    color: var(--danger-color);
+    transform: scale(1.1);
+}
+</style>
