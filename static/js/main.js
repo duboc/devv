@@ -1473,6 +1473,12 @@ function initializeRepoCacheAnalysisApp() {
         if (generateAnalysisBtn) generateAnalysisBtn.addEventListener('click', handleGenerateAnalysis);
         if (listCachesBtn) listCachesBtn.addEventListener('click', handleListCaches);
         if (deleteCacheBtn) deleteCacheBtn.addEventListener('click', handleDeleteCache);
+        
+        // Add event listener for the history tab
+        const historyTab = document.querySelector('.tab[data-tab="history"]');
+        if (historyTab) {
+            historyTab.addEventListener('click', handleLoadHistory);
+        }
     }
 
     function updateAnalysisDescription() {
@@ -1571,7 +1577,9 @@ function initializeRepoCacheAnalysisApp() {
                     question: question,
                     cache_name: sessionCache.name,
                     code_index: sessionCache.code_index,
-                    code_text: sessionCache.code_text
+                    code_text: sessionCache.code_text,
+                    repo_url: document.getElementById('repo_url').value,
+                    analysis_type: analysisType
                 })
             });
             const data = await response.json();
@@ -1695,6 +1703,52 @@ function initializeRepoCacheAnalysisApp() {
             "Output ($)": outputCost,
             "Total ($)": totalCost,
         };
+    }
+
+    async function handleLoadHistory() {
+        const historyContainer = document.getElementById('tab-history');
+        historyContainer.innerHTML = `<p class="placeholder-text">Loading history...</p>`;
+
+        try {
+            const response = await fetch('/repo_cache_analysis/history');
+            const history = await response.json();
+
+            if (response.ok) {
+                if (history.length > 0) {
+                    let historyHtml = '<div class="history-list">';
+                    history.forEach(item => {
+                        historyHtml += `
+                            <div class="history-item">
+                                <div class="history-header">
+                                    <strong>${item.type.replace(/_/g, ' ')}</strong> - <span>${new Date(item.timestamp).toLocaleString()}</span>
+                                    <i class="fas fa-chevron-down expand-icon"></i>
+                                </div>
+                                <div class="history-content">
+                                    <p><strong>Repo:</strong> ${item.repo_url}</p>
+                                    <div class="markdown-content">${marked.parse(item.text)}</div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    historyHtml += '</div>';
+                    historyContainer.innerHTML = historyHtml;
+
+                    // Add event listeners to new history items
+                    historyContainer.querySelectorAll('.history-header').forEach(header => {
+                        header.addEventListener('click', () => {
+                            header.parentElement.classList.toggle('expanded');
+                        });
+                    });
+
+                } else {
+                    historyContainer.innerHTML = `<p class="placeholder-text">No analysis history found.</p>`;
+                }
+            } else {
+                throw new Error(history.error || 'Failed to load history.');
+            }
+        } catch (error) {
+            historyContainer.innerHTML = `<p class="placeholder-text" style="color: var(--danger-color);">Error: ${error.message}</p>`;
+        }
     }
 
     function updateCostsDisplay() {

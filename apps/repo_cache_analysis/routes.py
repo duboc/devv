@@ -94,6 +94,24 @@ def get_code_prompt(question, code_index, code_text):
     Response:
     """
 
+def save_analysis(analysis_type, analysis_text, repo_url):
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Sanitize repo_url to create a valid filename
+    sanitized_repo = re.sub(r'[^a-zA-Z0-9]', '_', repo_url)
+    filename = f"{timestamp}_{analysis_type}_{sanitized_repo[:50]}.json"
+    filepath = os.path.join(HISTORY_DIR, filename)
+    
+    try:
+        with open(filepath, "w") as f:
+            json.dump({
+                "type": analysis_type,
+                "text": analysis_text,
+                "repo_url": repo_url,
+                "timestamp": timestamp
+            }, f)
+    except Exception as e:
+        print(f"Error saving analysis: {e}")
+
 # --- Routes ---
 
 @repo_cache_analysis_bp.route('/')
@@ -147,8 +165,10 @@ def analyze_repository():
     cache_name = data.get('cache_name')
     code_index = data.get('code_index')
     code_text = data.get('code_text')
+    repo_url = data.get('repo_url')
+    analysis_type = data.get('analysis_type')
 
-    if not all([question, cache_name, code_index, code_text]):
+    if not all([question, cache_name, code_index, code_text, repo_url, analysis_type]):
         return jsonify({'error': 'Missing required parameters for analysis'}), 400
 
     try:
@@ -161,6 +181,8 @@ def analyze_repository():
             generation_config={"max_output_tokens": 8192, "temperature": 0.4, "top_p": 1},
             safety_settings=safety_settings
         )
+        
+        save_analysis(analysis_type, response.text, repo_url)
         
         return jsonify({'analysis': response.text})
     except Exception as e:
@@ -206,3 +228,21 @@ def delete_cache(cache_name):
         return jsonify({"message": f"Cache {cache_id} deleted successfully."})
     except requests.exceptions.RequestException as e:
         return jsonify({"error": f"Failed to delete cache {cache_id}: {e}"}), 500
+
+@repo_cache_analysis_bp.route('/history', methods=['GET'])
+def get_history():
+    history = []
+    if not os.path.exists(HISTORY_DIR):
+        return jsonify([])
+
+    for filename in os.listdir(HISTORY_DIR):
+        if filename.endswith(".json"):
+            try:
+                with open(os.path.join(HISTORY_DIR, filename), "r") as f:
+                    history.append(json.load(f))
+            except Exception as e:
+                print(f"Error loading history file {filename}: {e}")
+
+    # Sort history by timestamp descending
+    history.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    return jsonify(history)
