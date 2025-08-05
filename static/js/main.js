@@ -1276,7 +1276,7 @@ function initializeRepoInspectionApp() {
             const data = await response.json();
 
             if (response.ok) {
-                resultsContainer.innerHTML = marked.parse(data.content);
+                displayResult('analysis', data.content, data.prompt);
                 setButtonState(generateBtn, 'success', 'regen_analysis_btn');
             } else {
                 throw new Error(data.error || 'Unknown error occurred.');
@@ -1341,6 +1341,59 @@ function initializeRepoInspectionApp() {
     }
     if(clearAllBtn) {
         clearAllBtn.addEventListener('click', clearAll);
+    }
+
+    function displayResult(type, content, prompt) {
+        const container = document.getElementById('results-container');
+        const placeholder = container.querySelector('p');
+        if (placeholder) placeholder.remove();
+        
+        const resultId = `result-${type}`;
+        let existingResult = document.getElementById(resultId);
+        if (existingResult) existingResult.remove();
+
+        const resultItem = document.createElement('div');
+        resultItem.className = 'result-item';
+        resultItem.id = resultId;
+
+        const typeIcons = {
+            'analysis': 'fas fa-search'
+        };
+
+        const header = document.createElement('div');
+        header.className = 'result-header';
+        header.innerHTML = `
+            <h4><i class="${typeIcons[type]}"></i> ${type.charAt(0).toUpperCase() + type.slice(1)}</h4>
+            <i class="fas fa-chevron-down expand-icon"></i>
+        `;
+        
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'result-content';
+        const markdownHtml = marked.parse(content);
+        
+        contentDiv.innerHTML = `
+            <div class="content-section">
+                <h5><i class="fas fa-file-alt"></i> Generated Content</h5>
+                <div class="markdown-content">${markdownHtml}</div>
+            </div>
+            <div class="content-section">
+                <h5><i class="fas fa-code"></i> Prompt Used</h5>
+                <pre class="prompt-content">${prompt}</pre>
+            </div>
+        `;
+
+        header.addEventListener('click', () => {
+            contentDiv.classList.toggle('visible');
+            header.classList.toggle('expanded');
+        });
+
+        resultItem.appendChild(header);
+        resultItem.appendChild(contentDiv);
+        container.prepend(resultItem);
+        
+        setTimeout(() => header.click(), 100);
+        
+        document.querySelector('.tab[data-tab="results"]').click();
     }
 }
 
