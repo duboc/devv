@@ -10,8 +10,8 @@ import requests
 import google.auth
 from google.auth.transport.requests import Request
 from pathlib import Path
-from flask import render_template, request, jsonify
-from vertexai.generative_models import GenerativeModel, Part
+from flask import render_template, request, jsonify, current_app
+from vertexai.generative_models import GenerativeModel, Part, HarmCategory, HarmBlockThreshold
 from vertexai.preview import caching
 from vertexai.preview.generative_models import GenerativeModel as PreviewGenerativeModel
 from . import repo_cache_analysis_bp
@@ -25,32 +25,18 @@ LOCATION = "us-central1"
 # Ensure history directory exists
 os.makedirs(HISTORY_DIR, exist_ok=True)
 
-# Initialize Vertex AI
-if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
-    try:
-        credentials, project_id = google.auth.default()
-        if not project_id:
-            project_id = os.getenv('GCP_PROJECT') # Fallback to env var if not inferred
-        if project_id:
-            vertexai.init(project=project_id, location=LOCATION)
-        else:
-            print("Warning: GCP_PROJECT not set and could not be inferred.")
-    except Exception as e:
-        print(f"Warning: Could not initialize Vertex AI. {e}")
-
-
 # Initialize Magika
 m = magika.Magika()
 
 # Safety settings
 safety_settings = {
-    vertexai.generative_models.HarmCategory.HARM_CATEGORY_HATE_SPEECH: vertexai.generative_models.HarmBlockThreshold.BLOCK_NONE,
-    vertexai.generative_models.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: vertexai.generative_models.HarmBlockThreshold.BLOCK_NONE,
-    vertexai.generative_models.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: vertexai.generative_models.HarmBlockThreshold.BLOCK_NONE,
-    vertexai.generative_models.HarmCategory.HARM_CATEGORY_HARASSMENT: vertexai.generative_models.HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
 }
 
-# --- Helper Functions (Adapted from Streamlit) ---
+# --- Helper Functions ---
 
 def get_access_token():
     try:
@@ -91,7 +77,6 @@ def extract_code(repo_dir):
 def get_code_prompt(question, code_index, code_text):
     return f"""
     Task: {question}
-
     Context:
     - You are an expert code analyzer and technical writer.
     - The entire codebase is provided below.
@@ -99,7 +84,6 @@ def get_code_prompt(question, code_index, code_text):
       \n\n{code_index}\n\n
     - The content of each file is concatenated below:
       \n\n{code_text}\n\n
-
     Instructions:
     1. Carefully analyze the provided codebase.
     2. Focus on addressing the specific task or question given.
@@ -107,7 +91,6 @@ def get_code_prompt(question, code_index, code_text):
     4. Use markdown formatting to enhance readability.
     5. If relevant, include code snippets or examples from the codebase.
     6. Ensure your analysis is accurate, insightful, and actionable.
-
     Response:
     """
 
@@ -119,6 +102,9 @@ def index():
 
 @repo_cache_analysis_bp.route('/process', methods=['POST'])
 def process_repository():
+    if not current_app.config.get('VERTEXAI_INITIALIZED'):
+        return jsonify({'error': 'Vertex AI is not initialized. Please check server logs.'}), 500
+
     data = request.get_json()
     repo_url = data.get('repo_url')
     cache_ttl_hours = data.get('cache_ttl', 1)
@@ -146,13 +132,16 @@ def process_repository():
             'char_count': char_count,
             'cache_name': cached_content.name,
             'code_index': code_index,
-            'code_text': code_text # Sending this to the client to avoid re-reading
+            'code_text': code_text
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @repo_cache_analysis_bp.route('/analyze', methods=['POST'])
 def analyze_repository():
+    if not current_app.config.get('VERTEXAI_INITIALIZED'):
+        return jsonify({'error': 'Vertex AI is not initialized. Please check server logs.'}), 500
+        
     data = request.get_json()
     question = data.get('question')
     cache_name = data.get('cache_name')
@@ -179,11 +168,14 @@ def analyze_repository():
 
 @repo_cache_analysis_bp.route('/caches', methods=['GET'])
 def list_caches():
+    if not current_app.config.get('VERTEXAI_INITIALIZED'):
+        return jsonify({'error': 'Vertex AI is not initialized. Please check server logs.'}), 500
+
     token = get_access_token()
     if not token:
         return jsonify({"error": "Failed to authenticate"}), 500
         
-    project_id = vertexai.get_project_id()
+    project_id = os.getenv('GCP_PROJECT')
     url = f"https://{LOCATION}-aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/{LOCATION}/cachedContents"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     
@@ -196,12 +188,14 @@ def list_caches():
 
 @repo_cache_analysis_bp.route('/caches/<path:cache_name>', methods=['DELETE'])
 def delete_cache(cache_name):
+    if not current_app.config.get('VERTEXAI_INITIALIZED'):
+        return jsonify({'error': 'Vertex AI is not initialized. Please check server logs.'}), 500
+
     token = get_access_token()
     if not token:
         return jsonify({"error": "Failed to authenticate"}), 500
 
-    project_id = vertexai.get_project_id()
-    # The cache_name from the client is the full resource name, so we just need the last part
+    project_id = os.getenv('GCP_PROJECT')
     cache_id = cache_name.split('/')[-1]
     url = f"https://{LOCATION}-aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/{LOCATION}/cachedContents/{cache_id}"
     headers = {"Authorization": f"Bearer {token}"}

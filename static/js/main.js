@@ -1617,19 +1617,24 @@ function initializeRepoCacheAnalysisApp() {
                             <tbody>
                     `;
                     caches.forEach(cache => {
+                        const cacheId = cache.name ? cache.name.split('/').pop() : 'N/A';
+                        const modelName = cache.modelName ? cache.modelName.split('/').pop() : 'N/A';
+                        const createTime = cache.createTime ? new Date(cache.createTime).toLocaleString() : 'N/A';
+                        const expireTime = cache.expireTime ? new Date(cache.expireTime).toLocaleString() : 'N/A';
+
                         tableHtml += `
                             <tr>
-                                <td>${cache.name.split('/').pop()}</td>
-                                <td>${cache.modelName.split('/').pop()}</td>
-                                <td>${new Date(cache.createTime).toLocaleString()}</td>
-                                <td>${new Date(cache.expireTime).toLocaleString()}</td>
+                                <td>${cacheId}</td>
+                                <td>${modelName}</td>
+                                <td>${createTime}</td>
+                                <td>${expireTime}</td>
                             </tr>
                         `;
                     });
                     tableHtml += `</tbody></table>`;
                     cachesListContainer.innerHTML = tableHtml;
 
-                    cacheSelect.innerHTML = caches.map(c => `<option value="${c.name}">${c.name.split('/').pop()}</option>`).join('');
+                    cacheSelect.innerHTML = caches.filter(c => c.name).map(c => `<option value="${c.name}">${c.name.split('/').pop()}</option>`).join('');
                     cacheSelect.style.display = 'block';
                     deleteCacheBtn.style.display = 'block';
 

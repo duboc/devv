@@ -1,12 +1,28 @@
 from flask import Flask, render_template
 from dotenv import load_dotenv
 import os
+import vertexai
 
 # Load environment variables
 load_dotenv()
 
 def create_app():
     app = Flask(__name__, template_folder='templates')
+
+    # Initialize Vertex AI
+    try:
+        project_id = os.getenv('GCP_PROJECT')
+        location = "us-central1"
+        if project_id:
+            vertexai.init(project=project_id, location=location)
+            app.config['VERTEXAI_INITIALIZED'] = True
+        else:
+            app.config['VERTEXAI_INITIALIZED'] = False
+            print("Warning: GCP_PROJECT not set. Some features may not work.")
+    except Exception as e:
+        app.config['VERTEXAI_INITIALIZED'] = False
+        print(f"Warning: Could not initialize Vertex AI. {e}")
+
 
     # Register blueprints
     from apps.story_to_data import story_to_data_bp
