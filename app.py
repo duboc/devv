@@ -24,6 +24,9 @@ def create_app():
     from apps.accessibility import accessibility_bp
     app.register_blueprint(accessibility_bp)
 
+    from apps.repo_inspection import repo_inspection_bp
+    app.register_blueprint(repo_inspection_bp)
+
     @app.route('/')
     def index():
         # This now renders the main layout, and JS handles the rest

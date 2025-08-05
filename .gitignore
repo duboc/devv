@@ -5,5 +5,4 @@ __pycache__/
 
 apps/__pycache__/*.pyc
 apps/*/__pycache__/*.pyc
-apps/accessibility/__pycache__/*.pyc
-apps/story_to_api/__pycache__/routes.cpython-312.pyc
+

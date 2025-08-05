@@ -33,6 +33,7 @@ async function loadPage(pageId) {
         'story_to_code': { title: 'User Story to Code', icon: 'fas fa-code', category: 'User Story Automation', url: '/story_to_code/' },
         'story_to_api': { title: 'User Story to API', icon: 'fas fa-server', category: 'User Story Automation', url: '/story_to_api/' },
         'image_to_code': { title: 'Image to Code', icon: 'fas fa-image', category: 'Code Intelligence', url: '/image_to_code/' },
+        'repo_inspection': { title: 'Repo Inspection', icon: 'fas fa-search', category: 'Code Intelligence', url: '/repo_inspection/' },
         'accessibility': { title: 'Accessibility', icon: 'fas fa-universal-access', category: 'UX/UI Design', url: '/accessibility/' },
         // Add other pages here as they are created
     };
@@ -65,6 +66,8 @@ async function loadPage(pageId) {
             initializeStoryToApiApp();
         } else if (pageId === 'image_to_code') {
             initializeImageToCodeApp();
+        } else if (pageId === 'repo_inspection') {
+            initializeRepoInspectionApp();
         } else if (pageId === 'accessibility') {
             initializeAccessibilityApp();
         }
@@ -1138,6 +1141,206 @@ function initializeStoryToApiApp() {
         `;
         
         document.querySelector('.tab[data-tab="generate"]').click();
+    }
+}
+
+function initializeRepoInspectionApp() {
+    const analysisTypeSelect = document.getElementById('analysis_type');
+    const analysisDescriptionTextarea = document.getElementById('analysis_description');
+    const customPromptGroup = document.getElementById('custom_prompt_group');
+    const cloneBtn = document.getElementById('clone_btn');
+    const generateBtn = document.getElementById('generate_analysis_btn');
+    const resultsContainer = document.getElementById('results-container');
+    const clearAllBtn = document.getElementById('clear_all_btn');
+
+    let analysisOptions = {};
+    let codeIndex = null;
+    let codeText = null;
+
+    initializeTabs();
+
+    // Fetch analysis options from the DOM (passed from Flask)
+    const analysisOptionsData = document.getElementById('analysis-options-data');
+    if (analysisOptionsData) {
+        try {
+            analysisOptions = JSON.parse(analysisOptionsData.textContent);
+        } catch (e) {
+            console.error("Could not parse analysis options:", e);
+        }
+    }
+
+    function initializeTabs() {
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetTab = tab.getAttribute('data-tab');
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                tabContents.forEach(content => {
+                    content.classList.toggle('active', content.id === `tab-${targetTab}`);
+                });
+            });
+        });
+    }
+
+    function updateDescription() {
+        if (!analysisTypeSelect) return;
+        const selectedType = analysisTypeSelect.value;
+        if (analysisOptions[selectedType]) {
+            analysisDescriptionTextarea.value = analysisOptions[selectedType];
+        }
+        
+        if (selectedType === 'custom') {
+            customPromptGroup.style.display = 'block';
+            analysisDescriptionTextarea.style.display = 'none';
+        } else {
+            customPromptGroup.style.display = 'none';
+            analysisDescriptionTextarea.style.display = 'block';
+        }
+    }
+
+    async function cloneAndIndex() {
+        const repoUrl = document.getElementById('repo_url').value;
+        if (!repoUrl) {
+            alert('Please enter a repository URL.');
+            return;
+        }
+
+        setButtonState(cloneBtn, 'loading');
+        resultsContainer.innerHTML = '<p>Cloning and indexing repository...</p>';
+        document.querySelector('.tab[data-tab="results"]').click();
+
+
+        try {
+            const response = await fetch('/repo_inspection/clone_and_index', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ repo_url: repoUrl }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                codeIndex = data.index;
+                codeText = data.text;
+                resultsContainer.innerHTML = `<p>${data.message}</p><p>Found ${codeIndex.length} files.</p>`;
+                setButtonState(cloneBtn, 'success', 'regen_clone_btn');
+                setButtonState(generateBtn, 'ready');
+            } else {
+                throw new Error(data.error || 'Unknown error occurred.');
+            }
+        } catch (error) {
+            resultsContainer.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            setButtonState(cloneBtn, 'ready');
+        }
+    }
+
+    async function generateAnalysis() {
+        const modelName = document.querySelector('input[name="model_name"]:checked').value;
+        const analysisType = analysisTypeSelect.value;
+        let question = analysisOptions[analysisType];
+
+        if (analysisType === 'custom') {
+            question = document.getElementById('custom_prompt').value;
+        }
+
+        if (!question) {
+            alert('Please select an analysis type or provide a custom prompt.');
+            return;
+        }
+
+        if (!codeIndex || !codeText) {
+            alert('Please clone and index a repository first.');
+            return;
+        }
+
+        setButtonState(generateBtn, 'loading');
+        resultsContainer.innerHTML = '<p>Generating analysis...</p>';
+        document.querySelector('.tab[data-tab="results"]').click();
+
+        try {
+            const response = await fetch('/repo_inspection/generate_analysis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model_name: modelName,
+                    question: question,
+                    code_index: codeIndex,
+                    code_text: codeText,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                resultsContainer.innerHTML = marked.parse(data.content);
+                setButtonState(generateBtn, 'success', 'regen_analysis_btn');
+            } else {
+                throw new Error(data.error || 'Unknown error occurred.');
+            }
+        } catch (error) {
+            resultsContainer.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            setButtonState(generateBtn, 'ready');
+        }
+    }
+    
+    function clearAll() {
+        codeIndex = null;
+        codeText = null;
+        resultsContainer.innerHTML = '<p style="text-align: center; color: var(--text-secondary); font-style: italic;">Generated content will appear here...</p>';
+        setButtonState(cloneBtn, 'ready');
+        setButtonState(generateBtn, 'waiting');
+        document.getElementById('repo_url').value = 'https://github.com/GoogleCloudPlatform/microservices-demo';
+        document.getElementById('regen_clone_btn').style.display = 'none';
+        document.getElementById('regen_analysis_btn').style.display = 'none';
+        document.querySelector('.tab[data-tab="configure"]').click();
+    }
+
+    function setButtonState(button, state, regenId) {
+        const loader = button.querySelector('.loader');
+        const regenIcon = regenId ? document.getElementById(regenId) : null;
+
+        button.disabled = false;
+        if(loader) loader.style.display = 'none';
+        if(regenIcon) regenIcon.style.display = 'none';
+
+        switch (state) {
+            case 'loading':
+                button.className = 'action-button button-loading';
+                if(loader) loader.style.display = 'inline-block';
+                button.disabled = true;
+                break;
+            case 'success':
+                button.className = 'action-button button-completed';
+                if(regenIcon) regenIcon.style.display = 'block';
+                break;
+            case 'ready':
+                button.className = 'action-button button-ready';
+                break;
+            case 'waiting':
+                button.className = 'action-button button-waiting';
+                button.disabled = true;
+                break;
+        }
+    }
+
+    if (analysisTypeSelect) {
+        analysisTypeSelect.addEventListener('change', updateDescription);
+        updateDescription();
+    }
+    if (cloneBtn) {
+        cloneBtn.addEventListener('click', cloneAndIndex);
+        document.getElementById('regen_clone_btn').addEventListener('click', cloneAndIndex);
+    }
+    if (generateBtn) {
+        generateBtn.addEventListener('click', generateAnalysis);
+        document.getElementById('regen_analysis_btn').addEventListener('click', generateAnalysis);
+    }
+    if(clearAllBtn) {
+        clearAllBtn.addEventListener('click', clearAll);
     }
 }
 
