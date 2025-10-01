@@ -1533,7 +1533,6 @@ function initializeRepoCacheAnalysisApp() {
             const data = await response.json();
 
             if (response.ok) {
-                sessionCache.name = data.cache_name;
                 sessionCache.char_count = data.char_count;
                 sessionCache.code_index = data.code_index;
                 sessionCache.code_text = data.code_text;
@@ -1553,7 +1552,7 @@ function initializeRepoCacheAnalysisApp() {
     }
 
     async function handleGenerateAnalysis() {
-        if (!sessionCache.name) {
+        if (!sessionCache.code_index) {
             alert('Please process a repository first.');
             return;
         }
@@ -1575,7 +1574,7 @@ function initializeRepoCacheAnalysisApp() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     question: question,
-                    cache_name: sessionCache.name,
+                    model_name: document.getElementById('model_name').value,
                     code_index: sessionCache.code_index,
                     code_text: sessionCache.code_text,
                     repo_url: document.getElementById('repo_url').value,

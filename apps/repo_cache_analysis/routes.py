@@ -2,25 +2,21 @@ import os
 import shutil
 import git
 import magika
-import vertexai
 import re
 import datetime
 import json
-import requests
-import google.auth
-from google.auth.transport.requests import Request
 from pathlib import Path
 from flask import render_template, request, jsonify, current_app
-from vertexai.generative_models import GenerativeModel, Part, HarmCategory, HarmBlockThreshold
-from vertexai.preview import caching
-from vertexai.preview.generative_models import GenerativeModel as PreviewGenerativeModel
+
+# Use the centralized GeminiClient and standard types
+from utils.utils_vertex import GeminiClient
+from google.genai import types as genai_types
+
 from . import repo_cache_analysis_bp
 
 # Constants
-MODEL_ID = "gemini-1.5-pro-002"
 REPO_DIR = "./repo_cache"
 HISTORY_DIR = "./history"
-LOCATION = "us-central1"
 
 # Ensure history directory exists
 os.makedirs(HISTORY_DIR, exist_ok=True)
@@ -28,24 +24,11 @@ os.makedirs(HISTORY_DIR, exist_ok=True)
 # Initialize Magika
 m = magika.Magika()
 
-# Safety settings
-safety_settings = {
-    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-}
-
 # --- Helper Functions ---
 
-def get_access_token():
-    try:
-        credentials, _ = google.auth.default()
-        credentials.refresh(Request())
-        return credentials.token
-    except Exception as e:
-        print(f"Error getting access token: {e}")
-        return None
+def get_gemini_client():
+    """Initializes and returns a GeminiClient instance."""
+    return GeminiClient(project_id=os.getenv('GCP_PROJECT'))
 
 def clone_repo(repo_url, repo_dir):
     if os.path.exists(repo_dir):
@@ -96,7 +79,6 @@ def get_code_prompt(question, code_index, code_text):
 
 def save_analysis(analysis_type, analysis_text, repo_url):
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    # Sanitize repo_url to create a valid filename
     sanitized_repo = re.sub(r'[^a-zA-Z0-9]', '_', repo_url)
     filename = f"{timestamp}_{analysis_type}_{sanitized_repo[:50]}.json"
     filepath = os.path.join(HISTORY_DIR, filename)
@@ -116,6 +98,7 @@ def save_analysis(analysis_type, analysis_text, repo_url):
 
 @repo_cache_analysis_bp.route('/')
 def index():
+    # The template might need simplification, but for now, we just render it.
     return render_template('repo_cache_analysis.html')
 
 @repo_cache_analysis_bp.route('/process', methods=['POST'])
@@ -125,8 +108,6 @@ def process_repository():
 
     data = request.get_json()
     repo_url = data.get('repo_url')
-    cache_ttl_hours = data.get('cache_ttl', 1)
-    cache_ttl_seconds = cache_ttl_hours * 3600
     
     if not repo_url:
         return jsonify({'error': 'Repository URL is required'}), 400
@@ -135,24 +116,15 @@ def process_repository():
         clone_repo(repo_url, REPO_DIR)
         code_index, code_text, char_count = extract_code(REPO_DIR)
 
-        system_instruction = "You are an expert code analyzer and technical writer."
-        contents = [Part.from_text(code_text)]
-        
-        cached_content = caching.CachedContent.create(
-            model_name=MODEL_ID,
-            system_instruction=system_instruction,
-            contents=contents,
-            ttl=datetime.timedelta(seconds=cache_ttl_seconds),
-        )
-
+        # Caching is removed. We just return the extracted code.
         return jsonify({
-            'message': f"Repository cloned, indexed, and cached successfully! Character count: {char_count}",
+            'message': f"Repository cloned and indexed successfully! Character count: {char_count}",
             'char_count': char_count,
-            'cache_name': cached_content.name,
             'code_index': code_index,
-            'code_text': code_text
+            'code_text': code_text  # Send the full code text to the client
         })
     except Exception as e:
+        current_app.logger.error(f"Error processing repository: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @repo_cache_analysis_bp.route('/analyze', methods=['POST'])
@@ -162,72 +134,37 @@ def analyze_repository():
         
     data = request.get_json()
     question = data.get('question')
-    cache_name = data.get('cache_name')
-    code_index = data.get('code_index')
-    code_text = data.get('code_text')
     repo_url = data.get('repo_url')
     analysis_type = data.get('analysis_type')
+    code_index = data.get('code_index')
+    code_text = data.get('code_text') # Expect the full code text from the client
 
-    if not all([question, cache_name, code_index, code_text, repo_url, analysis_type]):
+    if not all([question, repo_url, analysis_type, code_index, code_text]):
         return jsonify({'error': 'Missing required parameters for analysis'}), 400
 
     try:
-        model = PreviewGenerativeModel.from_cached_content(cached_content=caching.CachedContent(cache_name))
+        client = get_gemini_client()
         
+        # Construct the full prompt with the code text for each analysis
         prompt = get_code_prompt(question, code_index, code_text)
+        contents = [genai_types.Content(role="user", parts=[genai_types.Part(text=prompt)])]
 
-        response = model.generate_content(
-            prompt,
-            generation_config={"max_output_tokens": 8192, "temperature": 0.4, "top_p": 1},
-            safety_settings=safety_settings
+        response_text = client.generate_content(
+            contents=contents,
+            model=data.get('model_name'),
+            generation_config=genai_types.GenerateContentConfig(
+                max_output_tokens=8192,
+                temperature=0.4,
+                top_p=1
+            )
         )
         
-        save_analysis(analysis_type, response.text, repo_url)
+        save_analysis(analysis_type, response_text, repo_url)
         
-        return jsonify({'analysis': response.text})
+        return jsonify({'analysis': response_text})
     except Exception as e:
+        current_app.logger.error(f"Error analyzing repository: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
-
-@repo_cache_analysis_bp.route('/caches', methods=['GET'])
-def list_caches():
-    if not current_app.config.get('VERTEXAI_INITIALIZED'):
-        return jsonify({'error': 'Vertex AI is not initialized. Please check server logs.'}), 500
-
-    token = get_access_token()
-    if not token:
-        return jsonify({"error": "Failed to authenticate"}), 500
-        
-    project_id = os.getenv('GCP_PROJECT')
-    url = f"https://{LOCATION}-aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/{LOCATION}/cachedContents"
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        return jsonify(response.json().get('cachedContents', []))
-    except requests.exceptions.RequestException as e:
-        return jsonify({"error": f"Failed to list caches: {e}"}), 500
-
-@repo_cache_analysis_bp.route('/caches/<path:cache_name>', methods=['DELETE'])
-def delete_cache(cache_name):
-    if not current_app.config.get('VERTEXAI_INITIALIZED'):
-        return jsonify({'error': 'Vertex AI is not initialized. Please check server logs.'}), 500
-
-    token = get_access_token()
-    if not token:
-        return jsonify({"error": "Failed to authenticate"}), 500
-
-    project_id = os.getenv('GCP_PROJECT')
-    cache_id = cache_name.split('/')[-1]
-    url = f"https://{LOCATION}-aiplatform.googleapis.com/v1beta1/projects/{project_id}/locations/{LOCATION}/cachedContents/{cache_id}"
-    headers = {"Authorization": f"Bearer {token}"}
-
-    try:
-        response = requests.delete(url, headers=headers)
-        response.raise_for_status()
-        return jsonify({"message": f"Cache {cache_id} deleted successfully."})
-    except requests.exceptions.RequestException as e:
-        return jsonify({"error": f"Failed to delete cache {cache_id}: {e}"}), 500
 
 @repo_cache_analysis_bp.route('/history', methods=['GET'])
 def get_history():
@@ -235,14 +172,16 @@ def get_history():
     if not os.path.exists(HISTORY_DIR):
         return jsonify([])
 
-    for filename in os.listdir(HISTORY_DIR):
-        if filename.endswith(".json"):
-            try:
-                with open(os.path.join(HISTORY_DIR, filename), "r") as f:
-                    history.append(json.load(f))
-            except Exception as e:
-                print(f"Error loading history file {filename}: {e}")
+    try:
+        files = sorted(
+            [os.path.join(HISTORY_DIR, f) for f in os.listdir(HISTORY_DIR) if f.endswith(".json")],
+            key=os.path.getmtime,
+            reverse=True
+        )
+        for filepath in files:
+            with open(filepath, "r") as f:
+                history.append(json.load(f))
+    except Exception as e:
+        current_app.logger.error(f"Error loading history files: {e}", exc_info=True)
 
-    # Sort history by timestamp descending
-    history.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
     return jsonify(history)
