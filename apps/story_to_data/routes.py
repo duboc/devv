@@ -4,8 +4,8 @@ import os
 from utils.utils_vertex import sendPrompt
 
 # Load models from .env file
-model_gemini_flash = os.getenv("MODEL_GEMINI_FLASH", "gemini-1.5-flash")
-model_gemini_pro = os.getenv("MODEL_GEMINI_PRO", "gemini-1.5-pro")
+model_gemini_flash = os.getenv("MODEL_GEMINI_FLASH", "gemini-2.5-flash")
+model_gemini_pro = os.getenv("MODEL_GEMINI_PRO", "gemini-2.5-pro")
 
 def load_questions(file_path):
     try:
