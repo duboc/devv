@@ -1,3 +1,6 @@
 Flask
 google-cloud-aiplatform
 python-dotenv
+magika
+GitPython
+google-genai

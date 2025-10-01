@@ -33,6 +33,8 @@ async function loadPage(pageId) {
         'story_to_code': { title: 'User Story to Code', icon: 'fas fa-code', category: 'User Story Automation', url: '/story_to_code/' },
         'story_to_api': { title: 'User Story to API', icon: 'fas fa-server', category: 'User Story Automation', url: '/story_to_api/' },
         'image_to_code': { title: 'Image to Code', icon: 'fas fa-image', category: 'Code Intelligence', url: '/image_to_code/' },
+        'repo_inspection': { title: 'Repo Inspection', icon: 'fas fa-search', category: 'Code Intelligence', url: '/repo_inspection/' },
+        'repo_cache_analysis': { title: 'Repo Cache Analysis', icon: 'fas fa-search-dollar', category: 'Code Intelligence', url: '/repo_cache_analysis/' },
         'accessibility': { title: 'Accessibility', icon: 'fas fa-universal-access', category: 'UX/UI Design', url: '/accessibility/' },
         // Add other pages here as they are created
     };
@@ -65,6 +67,10 @@ async function loadPage(pageId) {
             initializeStoryToApiApp();
         } else if (pageId === 'image_to_code') {
             initializeImageToCodeApp();
+        } else if (pageId === 'repo_inspection') {
+            initializeRepoInspectionApp();
+        } else if (pageId === 'repo_cache_analysis') {
+            initializeRepoCacheAnalysisApp();
         } else if (pageId === 'accessibility') {
             initializeAccessibilityApp();
         }
@@ -1138,6 +1144,663 @@ function initializeStoryToApiApp() {
         `;
         
         document.querySelector('.tab[data-tab="generate"]').click();
+    }
+}
+
+function initializeRepoInspectionApp() {
+    const analysisTypeSelect = document.getElementById('analysis_type');
+    const analysisDescriptionTextarea = document.getElementById('analysis_description');
+    const customPromptGroup = document.getElementById('custom_prompt_group');
+    const cloneBtn = document.getElementById('clone_btn');
+    const generateBtn = document.getElementById('generate_analysis_btn');
+    const resultsContainer = document.getElementById('results-container');
+    const clearAllBtn = document.getElementById('clear_all_btn');
+
+    let analysisOptions = {};
+    let codeIndex = null;
+    let codeText = null;
+
+    initializeTabs();
+
+    // Fetch analysis options from the DOM (passed from Flask)
+    const analysisOptionsData = document.getElementById('analysis-options-data');
+    if (analysisOptionsData) {
+        try {
+            analysisOptions = JSON.parse(analysisOptionsData.textContent);
+        } catch (e) {
+            console.error("Could not parse analysis options:", e);
+        }
+    }
+
+    function initializeTabs() {
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetTab = tab.getAttribute('data-tab');
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                tabContents.forEach(content => {
+                    content.classList.toggle('active', content.id === `tab-${targetTab}`);
+                });
+            });
+        });
+    }
+
+    function updateDescription() {
+        if (!analysisTypeSelect) return;
+        const selectedType = analysisTypeSelect.value;
+        if (analysisOptions[selectedType]) {
+            analysisDescriptionTextarea.value = analysisOptions[selectedType];
+        }
+        
+        if (selectedType === 'custom') {
+            customPromptGroup.style.display = 'block';
+            analysisDescriptionTextarea.style.display = 'none';
+        } else {
+            customPromptGroup.style.display = 'none';
+            analysisDescriptionTextarea.style.display = 'block';
+        }
+    }
+
+    async function cloneAndIndex() {
+        const repoUrl = document.getElementById('repo_url').value;
+        if (!repoUrl) {
+            alert('Please enter a repository URL.');
+            return;
+        }
+
+        setButtonState(cloneBtn, 'loading');
+        resultsContainer.innerHTML = '<p>Cloning and indexing repository...</p>';
+        document.querySelector('.tab[data-tab="results"]').click();
+
+
+        try {
+            const response = await fetch('/repo_inspection/clone_and_index', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ repo_url: repoUrl }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                codeIndex = data.index;
+                codeText = data.text;
+                resultsContainer.innerHTML = `<p>${data.message}</p><p>Found ${codeIndex.length} files.</p>`;
+                setButtonState(cloneBtn, 'success', 'regen_clone_btn');
+                setButtonState(generateBtn, 'ready');
+            } else {
+                throw new Error(data.error || 'Unknown error occurred.');
+            }
+        } catch (error) {
+            resultsContainer.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            setButtonState(cloneBtn, 'ready');
+        }
+    }
+
+    async function generateAnalysis() {
+        const modelName = document.querySelector('input[name="model_name"]:checked').value;
+        const analysisType = analysisTypeSelect.value;
+        let question = analysisOptions[analysisType];
+
+        if (analysisType === 'custom') {
+            question = document.getElementById('custom_prompt').value;
+        }
+
+        if (!question) {
+            alert('Please select an analysis type or provide a custom prompt.');
+            return;
+        }
+
+        if (!codeIndex || !codeText) {
+            alert('Please clone and index a repository first.');
+            return;
+        }
+
+        setButtonState(generateBtn, 'loading');
+        resultsContainer.innerHTML = '<p>Generating analysis...</p>';
+        document.querySelector('.tab[data-tab="results"]').click();
+
+        try {
+            const response = await fetch('/repo_inspection/generate_analysis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model_name: modelName,
+                    question: question,
+                    code_index: codeIndex,
+                    code_text: codeText,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                displayResult('analysis', data.content, data.prompt);
+                setButtonState(generateBtn, 'success', 'regen_analysis_btn');
+            } else {
+                throw new Error(data.error || 'Unknown error occurred.');
+            }
+        } catch (error) {
+            resultsContainer.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            setButtonState(generateBtn, 'ready');
+        }
+    }
+    
+    function clearAll() {
+        codeIndex = null;
+        codeText = null;
+        resultsContainer.innerHTML = '<p style="text-align: center; color: var(--text-secondary); font-style: italic;">Generated content will appear here...</p>';
+        setButtonState(cloneBtn, 'ready');
+        setButtonState(generateBtn, 'waiting');
+        document.getElementById('repo_url').value = 'https://github.com/GoogleCloudPlatform/microservices-demo';
+        document.getElementById('regen_clone_btn').style.display = 'none';
+        document.getElementById('regen_analysis_btn').style.display = 'none';
+        document.querySelector('.tab[data-tab="configure"]').click();
+    }
+
+    function setButtonState(button, state, regenId) {
+        const loader = button.querySelector('.loader');
+        const regenIcon = regenId ? document.getElementById(regenId) : null;
+
+        button.disabled = false;
+        if(loader) loader.style.display = 'none';
+        if(regenIcon) regenIcon.style.display = 'none';
+
+        switch (state) {
+            case 'loading':
+                button.className = 'action-button button-loading';
+                if(loader) loader.style.display = 'inline-block';
+                button.disabled = true;
+                break;
+            case 'success':
+                button.className = 'action-button button-completed';
+                if(regenIcon) regenIcon.style.display = 'block';
+                break;
+            case 'ready':
+                button.className = 'action-button button-ready';
+                break;
+            case 'waiting':
+                button.className = 'action-button button-waiting';
+                button.disabled = true;
+                break;
+        }
+    }
+
+    if (analysisTypeSelect) {
+        analysisTypeSelect.addEventListener('change', updateDescription);
+        updateDescription();
+    }
+    if (cloneBtn) {
+        cloneBtn.addEventListener('click', cloneAndIndex);
+        document.getElementById('regen_clone_btn').addEventListener('click', cloneAndIndex);
+    }
+    if (generateBtn) {
+        generateBtn.addEventListener('click', generateAnalysis);
+        document.getElementById('regen_analysis_btn').addEventListener('click', generateAnalysis);
+    }
+    if(clearAllBtn) {
+        clearAllBtn.addEventListener('click', clearAll);
+    }
+
+    function displayResult(type, content, prompt) {
+        const container = document.getElementById('results-container');
+        const placeholder = container.querySelector('p');
+        if (placeholder) placeholder.remove();
+        
+        const resultId = `result-${type}`;
+        let existingResult = document.getElementById(resultId);
+        if (existingResult) existingResult.remove();
+
+        const resultItem = document.createElement('div');
+        resultItem.className = 'result-item';
+        resultItem.id = resultId;
+
+        const typeIcons = {
+            'analysis': 'fas fa-search'
+        };
+
+        const header = document.createElement('div');
+        header.className = 'result-header';
+        header.innerHTML = `
+            <h4><i class="${typeIcons[type]}"></i> ${type.charAt(0).toUpperCase() + type.slice(1)}</h4>
+            <i class="fas fa-chevron-down expand-icon"></i>
+        `;
+        
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'result-content';
+        const markdownHtml = marked.parse(content);
+        
+        contentDiv.innerHTML = `
+            <div class="content-section">
+                <h5><i class="fas fa-file-alt"></i> Generated Content</h5>
+                <div class="markdown-content">${markdownHtml}</div>
+            </div>
+            <div class="content-section">
+                <h5><i class="fas fa-code"></i> Prompt Used</h5>
+                <pre class="prompt-content">${prompt}</pre>
+            </div>
+        `;
+
+        header.addEventListener('click', () => {
+            contentDiv.classList.toggle('visible');
+            header.classList.toggle('expanded');
+        });
+
+        resultItem.appendChild(header);
+        resultItem.appendChild(contentDiv);
+        container.prepend(resultItem);
+        
+        setTimeout(() => header.click(), 100);
+        
+        document.querySelector('.tab[data-tab="results"]').click();
+    }
+}
+
+function initializeRepoCacheAnalysisApp() {
+    // State
+    let sessionCache = {
+        name: null,
+        char_count: 0,
+        code_index: null,
+        code_text: null,
+        costs: []
+    };
+
+    // Element References
+    const processRepoBtn = document.getElementById('process_repo_btn');
+    const generateAnalysisBtn = document.getElementById('generate_analysis_btn');
+    const listCachesBtn = document.getElementById('list_caches_btn');
+    const deleteCacheBtn = document.getElementById('delete_cache_btn');
+    const cacheTtlSlider = document.getElementById('cache_ttl');
+    const cacheTtlValue = document.getElementById('cache_ttl_value');
+    const analysisTypeSelect = document.getElementById('analysis_type');
+    const analysisDescription = document.getElementById('analysis_description');
+    const customPromptGroup = document.getElementById('custom_prompt_group');
+    const customPrompt = document.getElementById('custom_prompt');
+    const resultsContainer = document.getElementById('results-container');
+    const costsContainer = document.getElementById('costs-container');
+    const cachesListContainer = document.getElementById('caches-list-container');
+    const cacheSelect = document.getElementById('cache_select');
+
+    const analysisOptions = {
+        "summary": "Provide a comprehensive summary of the codebase, highlighting its architecture, main components, and top 3 key learnings for developers.",
+        "readme": "Generate a detailed README for the application, including project overview, setup instructions, main features, and contribution guidelines.",
+        "onboarding": "Create an in-depth getting started guide for new developers, covering setup process, code structure, development workflow, and best practices.",
+        "issues": "Conduct a thorough code review to identify and explain the top 3 most critical issues or areas for improvement in the codebase.",
+        "bug_fix": "Identify the most severe potential bug or vulnerability in the codebase, explain its impact, and provide a detailed fix with code examples.",
+        "troubleshooting": "Develop a comprehensive troubleshooting guide for common issues, including potential error scenarios, diagnostics steps, and resolution procedures.",
+        "custom": "Custom analysis (specify your own prompt)"
+    };
+
+    initializeTabs();
+    initializeEventListeners();
+    updateAnalysisDescription();
+
+    function initializeTabs() {
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetTab = tab.getAttribute('data-tab');
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                tabContents.forEach(content => {
+                    content.classList.toggle('active', content.id === `tab-${targetTab}`);
+                });
+            });
+        });
+    }
+
+    function initializeEventListeners() {
+        if (cacheTtlSlider) {
+            cacheTtlSlider.addEventListener('input', () => {
+                const hours = cacheTtlSlider.value;
+                cacheTtlValue.textContent = `${hours} hour${hours > 1 ? 's' : ''}`;
+            });
+        }
+
+        if (analysisTypeSelect) {
+            analysisTypeSelect.addEventListener('change', updateAnalysisDescription);
+        }
+
+        if (processRepoBtn) processRepoBtn.addEventListener('click', handleProcessRepository);
+        if (generateAnalysisBtn) generateAnalysisBtn.addEventListener('click', handleGenerateAnalysis);
+        if (listCachesBtn) listCachesBtn.addEventListener('click', handleListCaches);
+        if (deleteCacheBtn) deleteCacheBtn.addEventListener('click', handleDeleteCache);
+        
+        // Add event listener for the history tab
+        const historyTab = document.querySelector('.tab[data-tab="history"]');
+        if (historyTab) {
+            historyTab.addEventListener('click', handleLoadHistory);
+        }
+    }
+
+    function updateAnalysisDescription() {
+        const selected = analysisTypeSelect.value;
+        analysisDescription.value = analysisOptions[selected] || '';
+        customPromptGroup.style.display = selected === 'custom' ? 'block' : 'none';
+    }
+
+    function setButtonState(button, state) {
+        const loader = button.querySelector('.loader');
+        button.disabled = false;
+        if (loader) loader.style.display = 'none';
+        button.classList.remove('button-loading', 'button-completed', 'button-ready', 'button-waiting');
+
+        switch (state) {
+            case 'loading':
+                button.disabled = true;
+                button.classList.add('button-loading');
+                if (loader) loader.style.display = 'inline-block';
+                break;
+            case 'completed':
+                button.classList.add('button-completed');
+                break;
+            case 'ready':
+                button.classList.add('button-ready');
+                break;
+            case 'waiting':
+                button.classList.add('button-waiting');
+                button.disabled = true;
+                break;
+        }
+    }
+
+    async function handleProcessRepository() {
+        const repoUrl = document.getElementById('repo_url').value;
+        if (!repoUrl) {
+            alert('Please enter a repository URL.');
+            return;
+        }
+        setButtonState(processRepoBtn, 'loading');
+        resultsContainer.innerHTML = `<p class="placeholder-text">Cloning, indexing, and caching repository... This may take a moment.</p>`;
+
+        try {
+            const response = await fetch('/repo_cache_analysis/process', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    repo_url: repoUrl,
+                    cache_ttl: parseInt(cacheTtlSlider.value, 10)
+                })
+            });
+            const data = await response.json();
+
+            if (response.ok) {
+                sessionCache.name = data.cache_name;
+                sessionCache.char_count = data.char_count;
+                sessionCache.code_index = data.code_index;
+                sessionCache.code_text = data.code_text;
+                sessionCache.costs = []; // Reset costs for new repo
+
+                resultsContainer.innerHTML = `<p class="placeholder-text" style="color: var(--success-color);">${data.message}</p>`;
+                setButtonState(processRepoBtn, 'completed');
+                setButtonState(generateAnalysisBtn, 'ready');
+                updateCostsDisplay();
+            } else {
+                throw new Error(data.error || 'An unknown error occurred.');
+            }
+        } catch (error) {
+            resultsContainer.innerHTML = `<p class="placeholder-text" style="color: var(--danger-color);">Error: ${error.message}</p>`;
+            setButtonState(processRepoBtn, 'ready');
+        }
+    }
+
+    async function handleGenerateAnalysis() {
+        if (!sessionCache.name) {
+            alert('Please process a repository first.');
+            return;
+        }
+
+        const analysisType = analysisTypeSelect.value;
+        const question = analysisType === 'custom' ? customPrompt.value : analysisOptions[analysisType];
+
+        if (!question) {
+            alert('Please select an analysis type or provide a custom prompt.');
+            return;
+        }
+
+        setButtonState(generateAnalysisBtn, 'loading');
+        resultsContainer.innerHTML = `<p class="placeholder-text">Generating analysis...</p>`;
+
+        try {
+            const response = await fetch('/repo_cache_analysis/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    question: question,
+                    cache_name: sessionCache.name,
+                    code_index: sessionCache.code_index,
+                    code_text: sessionCache.code_text,
+                    repo_url: document.getElementById('repo_url').value,
+                    analysis_type: analysisType
+                })
+            });
+            const data = await response.json();
+
+            if (response.ok) {
+                const analysisHtml = marked.parse(data.analysis);
+                resultsContainer.innerHTML = `<div class="markdown-content">${analysisHtml}</div>`;
+                
+                // Simple cost calculation for display
+                const isFirstRequest = sessionCache.costs.length === 0;
+                const cost = calculateCacheCost(sessionCache.char_count, parseInt(cacheTtlSlider.value, 10), 1, sessionCache.char_count, data.analysis.length, isFirstRequest);
+                sessionCache.costs.push({type: analysisType, ...cost});
+                updateCostsDisplay();
+
+            } else {
+                throw new Error(data.error || 'An unknown error occurred.');
+            }
+        } catch (error) {
+            resultsContainer.innerHTML = `<p class="placeholder-text" style="color: var(--danger-color);">Error: ${error.message}</p>`;
+        } finally {
+            setButtonState(generateAnalysisBtn, 'ready');
+        }
+    }
+
+    async function handleListCaches() {
+        cachesListContainer.innerHTML = `<p class="placeholder-text">Fetching caches...</p>`;
+        try {
+            const response = await fetch('/repo_cache_analysis/caches');
+            const caches = await response.json();
+
+            if (response.ok) {
+                if (caches.length > 0) {
+                    let tableHtml = `
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Cache ID</th>
+                                    <th>Model</th>
+                                    <th>Create Time</th>
+                                    <th>Expire Time</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+                    caches.forEach(cache => {
+                        const cacheId = cache.name ? cache.name.split('/').pop() : 'N/A';
+                        const modelName = cache.modelName ? cache.modelName.split('/').pop() : 'N/A';
+                        const createTime = cache.createTime ? new Date(cache.createTime).toLocaleString() : 'N/A';
+                        const expireTime = cache.expireTime ? new Date(cache.expireTime).toLocaleString() : 'N/A';
+
+                        tableHtml += `
+                            <tr>
+                                <td>${cacheId}</td>
+                                <td>${modelName}</td>
+                                <td>${createTime}</td>
+                                <td>${expireTime}</td>
+                            </tr>
+                        `;
+                    });
+                    tableHtml += `</tbody></table>`;
+                    cachesListContainer.innerHTML = tableHtml;
+
+                    cacheSelect.innerHTML = caches.filter(c => c.name).map(c => `<option value="${c.name}">${c.name.split('/').pop()}</option>`).join('');
+                    cacheSelect.style.display = 'block';
+                    deleteCacheBtn.style.display = 'block';
+
+                } else {
+                    cachesListContainer.innerHTML = `<p class="placeholder-text">No active caches found.</p>`;
+                    cacheSelect.style.display = 'none';
+                    deleteCacheBtn.style.display = 'none';
+                }
+            } else {
+                throw new Error(caches.error || 'Failed to list caches.');
+            }
+        } catch (error) {
+            cachesListContainer.innerHTML = `<p class="placeholder-text" style="color: var(--danger-color);">Error: ${error.message}</p>`;
+        }
+    }
+
+    async function handleDeleteCache() {
+        const selectedCacheName = cacheSelect.value;
+        if (!selectedCacheName) {
+            alert('Please select a cache to delete.');
+            return;
+        }
+
+        if (!confirm(`Are you sure you want to delete cache ${selectedCacheName.split('/').pop()}?`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/repo_cache_analysis/caches/${encodeURIComponent(selectedCacheName)}`, {
+                method: 'DELETE'
+            });
+            const data = await response.json();
+
+            if (response.ok) {
+                alert(data.message);
+                handleListCaches(); // Refresh the list
+            } else {
+                throw new Error(data.error || 'Failed to delete cache.');
+            }
+        } catch (error) {
+            alert(`Error: ${error.message}`);
+        }
+    }
+    
+    function calculateCacheCost(cachedChars, storageHours, numRequests, inputChars, outputChars, isFirstRequest) {
+        const cacheCreationCost = isFirstRequest ? cachedChars * (0.0003125 / 1000) : 0;
+        const storageCost = isFirstRequest ? (cachedChars * storageHours) * (0.001125 / 1000) : 0;
+        const charInputCost = (inputChars * numRequests) * (0.0003125 / 1000);
+        const cachedInputCost = (cachedChars * numRequests) * (0.000078125 / 1000);
+        const totalInputCost = charInputCost + cachedInputCost;
+        const outputCost = (outputChars * numRequests) * (0.00375 / 1000);
+        const totalCost = cacheCreationCost + storageCost + totalInputCost + outputCost;
+
+        return {
+            "Cache Creation ($)": cacheCreationCost,
+            "Storage ($)": storageCost,
+            "Input ($)": totalInputCost,
+            "Output ($)": outputCost,
+            "Total ($)": totalCost,
+        };
+    }
+
+    async function handleLoadHistory() {
+        const historyContainer = document.getElementById('tab-history');
+        historyContainer.innerHTML = `<p class="placeholder-text">Loading history...</p>`;
+
+        try {
+            const response = await fetch('/repo_cache_analysis/history');
+            const history = await response.json();
+
+            if (response.ok) {
+                if (history.length > 0) {
+                    let historyHtml = '<div class="history-list">';
+                    history.forEach(item => {
+                        historyHtml += `
+                            <div class="history-item">
+                                <div class="history-header">
+                                    <strong>${item.type.replace(/_/g, ' ')}</strong> - <span>${new Date(item.timestamp).toLocaleString()}</span>
+                                    <i class="fas fa-chevron-down expand-icon"></i>
+                                </div>
+                                <div class="history-content">
+                                    <p><strong>Repo:</strong> ${item.repo_url}</p>
+                                    <div class="markdown-content">${marked.parse(item.text)}</div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    historyHtml += '</div>';
+                    historyContainer.innerHTML = historyHtml;
+
+                    // Add event listeners to new history items
+                    historyContainer.querySelectorAll('.history-header').forEach(header => {
+                        header.addEventListener('click', () => {
+                            header.parentElement.classList.toggle('expanded');
+                        });
+                    });
+
+                } else {
+                    historyContainer.innerHTML = `<p class="placeholder-text">No analysis history found.</p>`;
+                }
+            } else {
+                throw new Error(history.error || 'Failed to load history.');
+            }
+        } catch (error) {
+            historyContainer.innerHTML = `<p class="placeholder-text" style="color: var(--danger-color);">Error: ${error.message}</p>`;
+        }
+    }
+
+    function updateCostsDisplay() {
+        if (sessionCache.costs.length === 0) {
+            costsContainer.innerHTML = `<p class="placeholder-text">Cost breakdown will appear here...</p>`;
+            return;
+        }
+
+        let cumulativeCost = 0;
+        const costRows = sessionCache.costs.map(cost => {
+            cumulativeCost += cost["Total ($)"];
+            return {
+                "Analysis": cost.type.charAt(0).toUpperCase() + cost.type.slice(1),
+                "Cache Creation ($)": cost["Cache Creation ($)"].toFixed(6),
+                "Storage ($)": cost["Storage ($)"].toFixed(6),
+                "Input ($)": cost["Input ($)"].toFixed(6),
+                "Output ($)": cost["Output ($)"].toFixed(6),
+                "Total ($)": cost["Total ($)"].toFixed(6),
+                "Cumulative Cost ($)": cumulativeCost.toFixed(6)
+            };
+        });
+
+        let tableHtml = `
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Analysis</th>
+                        <th>Creation ($)</th>
+                        <th>Storage ($)</th>
+                        <th>Input ($)</th>
+                        <th>Output ($)</th>
+                        <th>Total ($)</th>
+                        <th>Cumulative ($)</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        costRows.forEach(row => {
+            tableHtml += `
+                <tr>
+                    <td>${row.Analysis}</td>
+                    <td>${row["Cache Creation ($)"]}</td>
+                    <td>${row["Storage ($)"]}</td>
+                    <td>${row["Input ($)"]}</td>
+                    <td>${row["Output ($)"]}</td>
+                    <td>${row["Total ($)"]}</td>
+                    <td>${row["Cumulative Cost ($)"]}</td>
+                </tr>
+            `;
+        });
+        tableHtml += `</tbody></table>`;
+        costsContainer.innerHTML = tableHtml;
     }
 }
 

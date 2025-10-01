@@ -1,0 +1,192 @@
+<!-- Tabs Container -->
+<div class="tabs-container">
+    <div class="tabs">
+        <div class="tab active" data-tab="analysis">
+            <i class="fas fa-search-dollar"></i>
+            <span>Repository Analysis</span>
+        </div>
+        <div class="tab" data-tab="cache">
+            <i class="fas fa-database"></i>
+            <span>Cache Management</span>
+        </div>
+        <div class="tab" data-tab="history">
+            <i class="fas fa-history"></i>
+            <span>Analysis History</span>
+        </div>
+    </div>
+</div>
+
+<!-- Content -->
+<div class="content">
+    <!-- Analysis Tab -->
+    <div id="tab-analysis" class="tab-content active">
+        <div class="grid grid-2">
+            <!-- Left Column: Repo Input and Analysis Selection -->
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="fas fa-cogs"></i> Step 1: Configure & Run</h3>
+                </div>
+                <div class="card-body">
+                    <form id="repo-form">
+                        <div class="form-group">
+                            <label for="repo_url" class="form-label">GitHub Repository URL:</label>
+                            <input type="text" id="repo_url" name="repo_url" value="https://gitlab.com/gustavolapa/microservices-demo-ref" class="input-field">
+                        </div>
+                        <div class="form-group">
+                            <label for="cache_ttl" class="form-label">Cache TTL (hours):</label>
+                            <input type="range" id="cache_ttl" name="cache_ttl" min="1" max="24" value="1" class="slider-field">
+                            <span id="cache_ttl_value">1 hour</span>
+                        </div>
+                        <div class="form-group">
+                             <button type="button" id="process_repo_btn" class="action-button button-ready">
+                                <span><i class="fas fa-cogs"></i> Process Repository</span>
+                                <div class="loader" id="loader_process"></div>
+                            </button>
+                        </div>
+                    </form>
+                    <hr class="divider">
+                    <form id="analysis-form" style="margin-top: 1rem;">
+                        <div class="form-group">
+                            <label for="analysis_type" class="form-label">Select Analysis Type:</label>
+                            <select id="analysis_type" name="analysis_type" class="select-field">
+                                <option value="summary">Summary</option>
+                                <option value="readme">Generate README</option>
+                                <option value="onboarding">Onboarding Guide</option>
+                                <option value="issues">Identify Critical Issues</option>
+                                <option value="bug_fix">Find & Fix Bugs</option>
+                                <option value="troubleshooting">Troubleshooting Guide</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="analysis_description" class="form-label">Description:</label>
+                            <textarea id="analysis_description" class="textarea-field" rows="3" disabled></textarea>
+                        </div>
+                        <div class="form-group" id="custom_prompt_group" style="display: none;">
+                            <label for="custom_prompt" class="form-label">Custom Prompt:</label>
+                            <textarea id="custom_prompt" class="textarea-field" rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <button type="button" id="generate_analysis_btn" class="action-button button-waiting" disabled>
+                                <span><i class="fas fa-magic"></i> Generate Analysis</span>
+                                <div class="loader" id="loader_analysis"></div>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Right Column: Results and Costs -->
+            <div class="card">
+                <div class="card-header">
+                    <h3><i class="fas fa-chart-line"></i> Results & Costs</h3>
+                </div>
+                <div class="card-body">
+                    <div id="results-container">
+                        <p class="placeholder-text">Generated analysis will appear here...</p>
+                    </div>
+                    <hr class="divider">
+                    <h4 class="mt-1">API Costs</h4>
+                    <div id="costs-container">
+                         <p class="placeholder-text">Cost breakdown will appear here...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cache Management Tab -->
+    <div id="tab-cache" class="tab-content">
+        <div class="card">
+            <div class="card-header">
+                <h3><i class="fas fa-database"></i> Cache Management</h3>
+                <button id="list_caches_btn" class="action-button button-ready" style="margin-left: auto;">
+                    <i class="fas fa-sync-alt"></i> Refresh List
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="caches-list-container">
+                    <p class="placeholder-text">Cached content will be listed here.</p>
+                </div>
+                 <div class="form-group mt-1">
+                    <select id="cache_select" class="select-field" style="display: none;"></select>
+                    <button id="delete_cache_btn" class="action-button button-danger mt-1" style="display: none;">
+                        <i class="fas fa-trash"></i> Delete Selected Cache
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Tab -->
+    <div id="tab-history" class="tab-content">
+        <!-- History content will be loaded here -->
+    </div>
+</div>
+
+<style>
+.placeholder-text {
+    text-align: center;
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-top: 1rem;
+}
+.divider {
+    border: none;
+    height: 1px;
+    background-color: var(--border-color);
+    margin: 1rem 0;
+}
+.mt-1 {
+    margin-top: 1rem;
+}
+.slider-field {
+    width: 100%;
+}
+.button-danger {
+    background-color: var(--danger-color);
+    color: white;
+}
+.button-danger:hover {
+    background-color: #c82333;
+}
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+.history-item {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: var(--background-color);
+}
+.history-header {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--card-header-background);
+    border-bottom: 1px solid var(--border-color);
+}
+.history-header strong {
+    color: var(--text-primary);
+}
+.history-header span {
+    color: var(--text-secondary);
+    font-size: 0.9em;
+}
+.history-content {
+    display: none;
+    padding: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+.history-item.expanded .history-content {
+    display: block;
+}
+.history-item.expanded .expand-icon {
+    transform: rotate(180deg);
+}
+</style>
+
+<div id="page-indicator" data-page="repo_cache_analysis"></div>
